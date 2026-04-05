@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import Header from './components/Header';
 import LaneCard from './components/LaneCard';
-import AccidentPanel, { LOCAL_STORAGE_KEY, type AccidentData } from './components/AccidentPanel';
+import { LOCAL_STORAGE_KEY, type AccidentData } from './components/AccidentPanel';
 import DashboardStats from './components/DashboardStats';
 import Footer from './components/Footer';
+import ActiveAmbulances from './components/ActiveAmbulances';
+import VipConvoyPanel from './components/VipConvoyPanel';
 import { doc, getDoc } from 'firebase/firestore'
-import { db } from './firestore/firebaseClient';
+import { db, addDocument } from './firestore/firebaseClient';
 import Toggle from './components/ui/ToggleButton';
 import { fetchLatestSession } from './firestore/firebaseClient';
 import YoloStream from './components/YoloSocket';
@@ -44,14 +46,26 @@ const App: React.FC = () => {
 
   const handleReset = () => {
    
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify([])); // This sets the value to an empty array as a string
-    
-    // If you want to completely remove the item instead of setting to "null":
-    // localStorage.removeItem(itemId);
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify([])); 
     toast.warn(`LocalStorage item "${LOCAL_STORAGE_KEY}" has been reset.`);
-    setAccidents([]); // Clear the accidents state
-    console.log(`LocalStorage item "${LOCAL_STORAGE_KEY}" has been reset.`);
+    setAccidents([]); 
   };
+
+  useEffect(() => {
+    const liveData = accidents[accidents.length - 1];
+    if (liveData && liveData.accident_state) {
+      if (accidents.length > 1) {
+          const prevAccident = accidents[accidents.length - 2];
+          // Prevent spamming the same exact accident location
+          if (prevAccident && prevAccident.address === liveData.address) return;
+      }
+      
+      toast.info(`🚑 Auto-Dispatching Emergency Unit for ${liveData.address}`);
+      addDocument('accidents_data', liveData)
+        .then(() => console.log("Auto Dispatched Accident Data"))
+        .catch((e) => console.error("Auto dispatch failed:", e));
+    }
+  }, [accidents]);
 
   useEffect(() => {
     let intervalIds: NodeJS.Timeout[] = [];
@@ -198,10 +212,11 @@ const App: React.FC = () => {
 
 
 
-        {/* Accident Panel on the right */}
-        <div className="w-full lg:w-3/5 h-full lg:h-auto">
-          <div className="sticky top-0">
-            <AccidentPanel liveData={accidents[accidents.length - 1]} />
+        {/* Active Ambulances Tracking */}
+        <div className="w-full lg:w-3/5 h-full lg:h-auto space-y-6">
+          <div className="sticky top-0 space-y-6">
+            <VipConvoyPanel />
+            <ActiveAmbulances />
           </div>
         </div>
 

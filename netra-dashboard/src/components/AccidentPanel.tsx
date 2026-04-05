@@ -11,6 +11,7 @@ export type AccidentData = {
   longitude: number;
   address: string;
   timestamp: string;
+  frame?: string;
 };
 
 
@@ -45,6 +46,12 @@ const AccidentPanel: React.FC<Props> = ({ liveData }) => {
         if (latest && latest.address === liveData.address) {
           return prev;
         }
+
+        // Auto Dispatch to Firebase
+        toast.info(`🚑 Auto-Dispatching Emergency Unit for ${liveData.address}`);
+        addDocument('accidents_data', liveData)
+          .then(() => console.log("Auto Dispatched Accident Data"))
+          .catch((e) => console.error("Auto dispatch failed:", e));
 
         // New accident detected, prepend to the array
         const updated = [liveData, ...prev];

@@ -20,7 +20,7 @@ app.add_middleware(
 
 # Load YOLOv8 model
 model = YOLO("runs/detect/train20/weights/best.pt")
-video_path = "videos/accident_trim.mp4"
+video_path = "videos/accident_trim.mov"
 
 # Roorkee location data
 roorkee_locations = [

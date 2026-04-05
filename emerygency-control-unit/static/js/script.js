@@ -22,97 +22,95 @@ async function initializeApplication(db) {
   const socket = io();
   let selectedAccident = null;
 
-  // Fetch the latest accident data
-  try {
-    const querySnapshot = await db.collection("accidents_data")
-      .orderBy("timestamp", "desc")
-      .limit(1)
-      .get();
+  let map = null;
+  let ambulanceMarkers = [];
+  let routingControl = null;
+  let accidentMarker = null;
+  const busyAmbulances = new Set();
+  const handledAccidents = new Set();
 
-    if (!querySnapshot.empty) {
-      const latestAccident = querySnapshot.docs[0].data();
-      selectedAccident = {
-        lat: latestAccident.latitude,
-        lng: latestAccident.longitude,
-        address: latestAccident.address || "Accident Location",
-        frame: latestAccident.frame || null
-      };
+  db.collection("accidents_data")
+    .orderBy("timestamp", "desc")
+    .limit(1)
+    .onSnapshot(querySnapshot => {
+      if (!querySnapshot.empty) {
+        const latestAccident = querySnapshot.docs[0].data();
+        selectedAccident = {
+          lat: latestAccident.latitude,
+          lng: latestAccident.longitude,
+          address: latestAccident.address || "Accident Location",
+          frame: latestAccident.frame || null,
+          detections: latestAccident.detections || 0
+        };
 
-      console.log("Latest accident data:", selectedAccident);
+        console.log("Latest accident data:", selectedAccident);
 
-      // Update the existing HTML elements
-      const accidentImage = document.getElementById('accidentImage');
-      const accidentAddress = document.getElementById('accidentAddress');
+        const accidentImage = document.getElementById('accidentImage');
+        const accidentAddress = document.getElementById('accidentAddress');
 
-      if (selectedAccident.frame) {
-        accidentImage.src = `data:image/png;base64,${selectedAccident.frame}`;
-        accidentImage.style.display = 'block';
+        if (selectedAccident.frame) {
+          accidentImage.src = `data:image/jpeg;base64,${selectedAccident.frame}`;
+          accidentImage.style.display = 'block';
+        }
+
+        accidentAddress.textContent = selectedAccident.address;
+        
+        const userLatLng = L.latLng(selectedAccident.lat, selectedAccident.lng);
+        setupMapAndDispatch(userLatLng, selectedAccident);
       } else {
-        accidentImage.style.display = 'none';
+        document.getElementById('map').innerHTML = "<p>No recent accidents detected.</p>";
       }
+    }, error => {
+      console.error("Error fetching accident data:", error);
+    });
 
-      accidentAddress.textContent = selectedAccident.address;
-
-    } else {
-      console.log("No accidents found in database");
-      document.getElementById('map').innerHTML = "<p>No recent accidents detected. The system will activate when an accident is reported.</p>";
-      return;
+  function setupMapAndDispatch(userLatLng, accidentData) {
+    const accidentKey = `${accidentData.lat.toFixed(5)},${accidentData.lng.toFixed(5)}`;
+    if (handledAccidents.has(accidentKey)) {
+       console.log("Already dispatched for this location. Skipping.");
+       return;
     }
-  } catch (error) {
-    console.error("Error fetching accident data:", error);
-    document.getElementById('map').innerHTML = "<p>Error loading accident data. Please try again later.</p>";
-    return;
+    handledAccidents.add(accidentKey);
+
+    if (!map) {
+      document.getElementById('map').innerHTML = ''; // clear any error texts
+      map = L.map('map').setView(userLatLng, 15);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+      }).addTo(map);
+    } else {
+      map.setView(userLatLng, 15);
+    }
+
+    if (accidentMarker) {
+      map.removeLayer(accidentMarker);
+    }
+
+    accidentMarker = L.marker(userLatLng).addTo(map)
+      .bindPopup(`<b>${accidentData.address}</b><br>
+                 Latitude: ${accidentData.lat.toFixed(6)}<br>
+                 Longitude: ${accidentData.lng.toFixed(6)}`).openPopup();
+
+    if (ambulanceMarkers.length === 0) {
+      const ambulanceIds = Array.from({ length: 10 }, (_, i) => `UK 17 AB ${String(11 + i).padStart(4, '0')}`);
+      
+      const fakeAmbulances = Array.from({ length: 10 }, () => ({
+        lat: userLatLng.lat + (Math.random() - 0.5) * 0.02,
+        lng: userLatLng.lng + (Math.random() - 0.5) * 0.02
+      }));
+
+      fakeAmbulances.forEach((amb, idx) => {
+        const marker = L.marker([amb.lat, amb.lng], { icon: ambulanceIcon }).addTo(map).bindPopup(ambulanceIds[idx]);
+        marker.ambulanceId = ambulanceIds[idx];
+        ambulanceMarkers.push(marker);
+      });
+    }
+
+    // Auto dispatch immediately!
+    autoSearchAmbulance(userLatLng, accidentData);
   }
 
-  const userLatLng = L.latLng(selectedAccident.lat, selectedAccident.lng);
-  const map = L.map('map').setView(userLatLng, 15);
-
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap contributors'
-  }).addTo(map);
-
-  let routingControl = null;
-
-  const ambulanceIcon = L.icon({
-    iconUrl: '/static/img/ambulance.png',
-    iconSize: [32, 32],
-    iconAnchor: [16, 32],
-    popupAnchor: [0, -32]
-  });
-
-  const trafficIcon = L.icon({
-    iconUrl: '/static/img/traffic-light.png',
-    iconSize: [24, 36],
-    iconAnchor: [12, 36],
-    popupAnchor: [0, -36]
-  });
-
-  const ambulanceIds = ['ambulance_1', 'ambulance_2', 'ambulance_3', 'ambulance_4'];
-  const ambulanceMarkers = [];
-
-  // Place accident marker
-  L.marker(userLatLng)
-    .addTo(map)
-    .bindPopup(`<b>${selectedAccident.address}</b><br>
-               Latitude: ${selectedAccident.lat.toFixed(6)}<br>
-               Longitude: ${selectedAccident.lng.toFixed(6)}`)
-    .openPopup();
-
-  // Fake ambulances
-  const fakeAmbulances = Array.from({ length: 4 }, () => ({
-    lat: userLatLng.lat + (Math.random() - 0.5) * 0.02,
-    lng: userLatLng.lng + (Math.random() - 0.5) * 0.02
-  }));
-
-  fakeAmbulances.forEach((amb, idx) => {
-    const marker = L.marker([amb.lat, amb.lng], { icon: ambulanceIcon })
-      .addTo(map)
-      .bindPopup(`Ambulance ${idx + 1}`);
-    marker.ambulanceId = ambulanceIds[idx];
-    ambulanceMarkers.push(marker);
-  });
-
-  function autoSearchAmbulance() {
+  function autoSearchAmbulance(userLatLng, accidentData) {
     const searchRadii = [500, 1000, 1500];
     let attempt = 0;
     let searchCircle = null;
@@ -135,6 +133,7 @@ async function initializeApplication(db) {
       const nearest = findNearestAmbulanceWithinRadius(userLatLng, ambulanceMarkers, radius);
 
       if (nearest) {
+        busyAmbulances.add(nearest.ambulanceId);
         nearest.openPopup();
 
         socket.emit('ambulance-operate', {
@@ -161,7 +160,7 @@ async function initializeApplication(db) {
             const route = e.routes[0];
             const coordinates = route.coordinates;
             const routeId = db.collection('emergencyRoutes').doc().id;
-            storeTrafficLights(routeId, nearest.ambulanceId, coordinates);
+            storeTrafficLights(routeId, nearest.ambulanceId, coordinates, userLatLng, accidentData);
           })
           .addTo(map);
 
@@ -182,6 +181,7 @@ async function initializeApplication(db) {
     let nearest = null;
     let minDist = Infinity;
     markers.forEach(marker => {
+      if (busyAmbulances.has(marker.ambulanceId)) return;
       const dist = userLL.distanceTo(marker.getLatLng());
       if (dist <= radius && dist < minDist) {
         minDist = dist;
@@ -191,7 +191,7 @@ async function initializeApplication(db) {
     return nearest;
   }
 
-  async function storeTrafficLights(routeId, ambulanceId, coordinates) {
+  async function storeTrafficLights(routeId, ambulanceId, coordinates, userLatLng, accidentData) {
     try {
       const batch = db.batch();
       const trafficLightsRef = db.collection('trafficLights');
@@ -232,6 +232,8 @@ async function initializeApplication(db) {
       const routeData = {
         ambulanceId: ambulanceId,
         accidentLocation: new firebase.firestore.GeoPoint(userLatLng.lat, userLatLng.lng),
+        address: accidentData.address,
+        severity: accidentData.detections > 10 ? 'CRITICAL' : 'MODERATE',
         startTime: firebase.firestore.FieldValue.serverTimestamp(),
         status: 'active',
         trafficLights,
@@ -248,8 +250,26 @@ async function initializeApplication(db) {
     }
   }
 
+  const ambulanceIcon = L.icon({
+    iconUrl: '/static/img/ambulance.png',
+    iconSize: [32, 32],
+    iconAnchor: [16, 32],
+    popupAnchor: [0, -32]
+  });
+
+  const trafficIcon = L.icon({
+    iconUrl: '/static/img/traffic-light.png',
+    iconSize: [24, 36],
+    iconAnchor: [12, 36],
+    popupAnchor: [0, -36]
+  });
+
   // Button click
-  document.getElementById('searchAmbulanceBtn').addEventListener('click', autoSearchAmbulance);
+  document.getElementById('searchAmbulanceBtn').addEventListener('click', () => { 
+    if (selectedAccident) {
+       autoSearchAmbulance(L.latLng(selectedAccident.lat, selectedAccident.lng));
+    }
+  });
 
   // Trigger from server
   socket.on('trigger-assigned', data => {

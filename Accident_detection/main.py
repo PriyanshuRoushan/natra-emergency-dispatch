@@ -7,7 +7,7 @@ import random
 
 # Load YOLOv8 model
 model = YOLO("runs/detect/train20/weights/best.pt")
-video_path = "videos/accident.mp4"
+video_path = "videos/accident_trim.mov"
 save_frame_dir = "static/detected_frames"
 os.makedirs(save_frame_dir, exist_ok=True)
 

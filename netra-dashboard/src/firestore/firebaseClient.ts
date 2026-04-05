@@ -1,22 +1,22 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
 import { addDoc, collection, getDocs, getFirestore, limit, orderBy, query } from "firebase/firestore";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_APIKEY,
-  authDomain: import.meta.env.VITE_AUTHDOMAIN,
-  projectId: import.meta.env.VITE_PROJECTID,
-  storageBucket: import.meta.env.VITE_STORAGEBUCKET,
-  messagingSenderId: import.meta.env.VITE_MESSAGINGSENDERID,
-  appId: import.meta.env.VITE_APPID,
+  apiKey: "AIzaSyBEnvJHTOFtd-jPiBaCu2nxgbLA5Ycr0cU",
+  authDomain: "traffic-sim-6e506.firebaseapp.com",
+  projectId: "traffic-sim-6e506",
+  storageBucket: "traffic-sim-6e506.firebasestorage.app",
+  messagingSenderId: "1017421602185",
+  appId: "1:1017421602185:web:aeb2251728e43277135558",
   measurementId: "G-QH22HW4L1Q"
 };
 
 // Initialize Firebase
 export const app = initializeApp(firebaseConfig);
+export const analytics = getAnalytics(app);
 export const db = getFirestore(app);
 
 
