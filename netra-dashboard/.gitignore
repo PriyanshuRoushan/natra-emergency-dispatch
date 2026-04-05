@@ -25,4 +25,4 @@ dist-ssr
 
 .env
 
-firebaseClient.ts
+netra-dashboard/src/firestore/firebaseClient.ts
